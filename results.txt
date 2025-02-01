@@ -1,12 +1,2 @@
-Combination:
-	alexnet - 10 - 0.001 - 0
-	Average Accuracy: 0.915
-	Better Replication: 1
-	Execution Time: 00:03:21:789
 
-Combination:
-	alexnet - 10 - 0.001 - 0.0001
-	Average Accuracy: 0.925
-	Better Replication: 1
-	Execution Time: 00:03:21:519
 

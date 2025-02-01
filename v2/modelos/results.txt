@@ -1,13 +1,2 @@
-Combination:
-	alexnet - 10 - 0.001 - 0
-	Average Accuracy: 0.91
-	Better Replication: 0
-	Execution Time: 00:02:55:610
 
-Combination:
-	alexnet - 10 - 0.001 - 0.0001
-	Average Accuracy: 0.95
-	Better Replication: 1
-	Execution Time: 00:02:50:888
 
-Error in processing combination for model alexnet.Error in processing combination for model alexnet.
