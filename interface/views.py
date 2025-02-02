@@ -3,6 +3,7 @@ import json
 import logging
 from itertools import product
 import shutil
+
 import threading
 import time
 from django.http import JsonResponse
@@ -20,11 +21,14 @@ from interface.cnn import CNN, define_transforms, read_images
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-
 # Conjunto para armazenar workers registrados
-registered_workers = set()
+registered_workers = []
+task_queue = Queue()
+finished_workers = 0
+queue = Queue()
+queue_lock = Lock()
+available_workers = 0
+
 
 def index_view(request):
     """Renderiza o template principal."""
@@ -40,7 +44,7 @@ def start_training(request):
     if request.method == 'POST':
         clean_models_directory('models')
         threading.Thread(target=run_training_process).start()
-        return JsonResponse({"message": "Training started"}, status=200)
+        return JsonResponse({"message": "Centralized Uniprocess training started."}, status=200)
     return JsonResponse({"error": "Method not allowed"}, status=405)
 
 def run_training_process():
@@ -175,150 +179,195 @@ def process_combination(args):
 # ==================================================
 
 # Configuração da fila e do lock
-queue = Queue()
-queue_lock = Lock()
+
 
 
 
 @csrf_exempt
 def register_worker(request):
     """Registra um worker no sistema."""
-    # Imprime o tipo de método da requisição
+    global available_workers  # Declare aqui que está utilizando a variável global
 
     if request.method == 'POST':
         try:
-            data = json.loads(request.body)
-            print(data)
+            data = json.loads(request.body.decode('utf-8'))
             machine_id = data.get('machine_id')
             ip_address = data.get('ip_address')
-            port = data.get('port')
             status = data.get('status')
             num_cores = data.get('num_cores')
         
             if machine_id and ip_address:
                 with queue_lock:
-                    registered_workers.add((machine_id, ip_address))
+                    registered_workers.append((machine_id, ip_address))
+                    available_workers += 1  # Controle preciso do número de workers
+                    task_queue.put((machine_id, ip_address, status, num_cores,))
                 return JsonResponse({"message": f"Worker {machine_id} registered successfully."}, status=200)
             else:
-                return JsonResponse({"error": "error"}, status=400)
+                return JsonResponse({"error": "machine_id or ip_address missing."}, status=400)
 
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON format."}, status=400)
     
     return JsonResponse({"error": "Method not allowed"}, status=405)
 
-# Função para enviar tarefas para workers
-def send_tasks_to_workers():
-    """Envia tarefas da fila para os workers registrados."""
-    with queue_lock:
-        if registered_workers and not queue.empty():
-            while not queue.empty() and registered_workers:
-                task_data = queue.get()
-                worker_id, worker_url = registered_workers.pop()
-                send_task_to_worker(worker_id, worker_url, task_data)
-                registered_workers.add((worker_id, worker_url))
-    threading.Timer(5.0, send_tasks_to_workers).start()
-
-# Função para enviar uma tarefa para um worker específico
-def send_task_to_worker(worker_id, worker_url, task_data):
-    """Envia uma tarefa para um worker específico."""
-    try:
-        response = requests.post(f"{worker_url}/receive-task/", json=json.loads(task_data))
-        if response.status_code == 200:
-            logging.info(f"Task sent to {worker_id} successfully.")
-        else:
-            logging.error(f"Failed to send task to {worker_id}. Status Code: {response.status_code}")
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error communicating with {worker_id}: {e}")
-
 # Função para popular a fila com combinações
 @csrf_exempt
 def combine(request):
     if request.method == 'POST':
         # Parâmetros para combinar
-        replications = 10
+        replications = [1]  # Encapsule o valor inteiro em uma lista
         model_names = ['alexnet', 'mobilenet_v3_large', 'mobilenet_v3_small', 'resnet18', 'resnet101', 'vgg11', 'vgg19']
         epochs = [10, 20]
         learning_rates = [0.001, 0.0001, 0.00001]
         weight_decays = [0, 0.0001]
 
         # Gerar todas as combinações possíveis de hiperparâmetros
-        combinations = list(product(model_names, epochs, learning_rates, weight_decays))
+        combinations = list(product(replications, model_names, epochs, learning_rates, weight_decays))
 
         # Adicionar cada combinação na fila após serializar para JSON
-        for model_name, epoch, learning_rate, weight_decay in combinations:
+        for replication, model_name, epoch, learning_rate, weight_decay in combinations:
             json_data = json.dumps({
+                "replications": replication,
                 "model_name": model_name,
                 "epochs": epoch,
                 "learning_rate": learning_rate,
                 "weight_decay": weight_decay
             }, indent=4)
             queue.put(json_data)
-
+            print(json_data)
+            
         return JsonResponse({'message': 'Combinações foram enfileiradas com sucesso.'}, status=200)
     else:
         return JsonResponse({'error': 'Método não permitido.'}, status=405)
 
 
-def processRequest(receivedJson):
-    try:
-        with queue_lock:
-            status = receivedJson.get('status')
-            if status in ['ONLINE', 'FINISHED']:
-                if status == 'FINISHED':
-                    data = receivedJson.get('data')
-                    if data:
-                        with open("results.txt", "a") as file:
-                            file.write(json.dumps(data) + "\n")
-                    else:
-                        print("Aviso: Nenhum dado encontrado no JSON para salvar.")
-                
-                elif status == 'ONLINE':
-                    num_cores = receivedJson.get('num_cores')
-                    if num_cores:
-                        combinations = []  # Lista para armazenar as combinações retiradas da fila
-                        for _ in range(num_cores):
-                            if not queue.empty():
-                                combinations.append(queue.get())
-                            else:
-                                break
-                        # Retorna as combinações armazenadas no formato de um objeto
-                        return {"data": combinations}
-            
-            if not queue.empty():
-                return queue.get()
-            else:
-                return None
-    except Exception as e:
-        print(f"Erro durante processamento: {e}")
-        return None
-
-# View para o endpoint POST
 @csrf_exempt
-def worker_endpoint(request):
+def decentralized_multiprocess_view(request):
+    """Inicia o treinamento descentralizado via multiprocessamento."""
+    
+    if request.method == 'POST':
+        clean_models_directory('models')
+
+        # Manejamento de threads com base no número de workers
+        threads = []
+      
+        # Use a condição para garantir proteção contra corrida
+        with queue_lock:
+            workers_to_use = min(len(registered_workers), available_workers)
+        
+        for _ in range(workers_to_use):
+            thread = threading.Thread(target=processRequest)
+            thread.start()
+            threads.append(thread)
+
+        for thread in threads:
+            thread.join()
+        
+        return JsonResponse({"message": "Decentralized multiprocess training completed."}, status=200)
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+
+
+        
+def processRequest():
+    """Processa uma requisição de worker (descentralizada)."""
+    
+    while True:  # Mantém o loop rodando para processar tarefas enquanto houver itens na fila.
+        with queue_lock:  # Usa um bloqueio para assegurar que o acesso à fila seja thread-safe.
+            if task_queue.empty():
+                break  # Se a fila estiver vazia, sai do loop e para o processamento.
+
+            # Recupera a próxima tupla de tarefa da fila.
+            received_tuple = task_queue.get()
+
+        # Define as chaves que serão usadas para transformar a tupla em um dicionário.
+        keys = ['machine_id', 'ip_address', 'status', 'num_cores']
+
+        # Converte a tupla em um dicionário para fácil acesso.
+        receivedJson = dict(zip(keys, received_tuple))
+
+        # Obtém o status do trabalhador da tarefa atual.
+        status = receivedJson.get('status')
+
+        if status == 'ONLINE':  # Se o status do trabalhador é 'ONLINE':
+            # Obtém o número de núcleos disponíveis para processamento.
+            num_cores = receivedJson.get('num_cores', 0)
+            combinations = []  # Inicializa uma lista para armazenar combinações que serão processadas.
+
+            with queue_lock:  # Novamente, usa um bloqueio para acesso seguro à fila global de combinações.
+                # Itera até o número de combinações disponíveis ou num_cores, o que for menor.
+                for _ in range(num_cores):
+                    if not queue.empty():
+                        combinations.append(queue.get())  # Adiciona a combinação à lista se a fila não estiver vazia.
+                    else:
+                        break  # Encerra o loop se a fila ficar vazia.
+
+            # Prepara o JSON a ser enviado contendo todas as combinações selecionadas.
+            json_to_send = {"data": combinations}
+
+            # Envia o JSON para a URL de endpoint do trabalhador concatenando com ip_address.
+            send_json(json_to_send, receivedJson.get('ip_address') + 'receive_task/')
+
+        elif status == 'FINISHED':  # Se o status resolve para 'FINISHED':
+            # Checa se há dados associados ao término da tarefa.
+            data = receivedJson.get('data')
+
+            if data:
+                # Salva os resultados em um arquivo de texto local.
+                with open("results.txt", "a") as file:
+                    file.write(json.dumps(data) + "\n")  # Grava os dados finalizados no arquivo.
+                
+            # Loga uma mensagem indicando o sucesso na gravação dos dados.
+            logging.info("Data saved successfully")
+            
+            
+
+@csrf_exempt          
+def send_json(json_data, destination_url):
+    """
+    Envia dados JSON para a URL de destino especificada, usando o método HTTP POST.
+    """
+    headers = {'Content-Type': 'application/json'}
+
+    if isinstance(json_data, dict) and 'data' in json_data:
+        json_data['data'] = [json.loads(item) if isinstance(item, str) else item for item in json_data['data']]
+
+    # Converte o dicionário em JSON string formatada para depuração correta
+    json_string = json.dumps(json_data, indent=4)
+    print(json_string)  # Para verificar que está correto
+
+    try:
+        response = requests.post(destination_url, json=json_data, headers=headers)
+        response.raise_for_status()
+        print(f"JSON enviado com sucesso para {destination_url}")
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao enviar JSON para {destination_url}: {e}")
+        
+@csrf_exempt
+def record_results(request):
     if request.method == 'POST':
         try:
-            # Carrega o JSON recebido
-            receivedJson = json.loads(request.body)
-            
-            # Processa a requisição
-            response_data = processRequest(receivedJson)
-            
-            # Retorna a resposta
-            if response_data:
-                return JsonResponse(response_data, status=200)
-            else:
-                return JsonResponse({"message": "Nenhuma tarefa disponível na fila."}, status=200)
-        
+            # Decodifica o JSON do corpo da requisição
+            data = json.loads(request.body)
+
+            # Serialize e escreva o JSON no arquivo `results.txt`
+            with open('results.txt', 'a') as file:
+                file.write(json.dumps(data, indent=4))
+                file.write('\n')
+
+            return JsonResponse({'message': 'Resultados gravados com sucesso.'}, status=200)
+
         except json.JSONDecodeError:
-            return JsonResponse({"error": "JSON inválido."}, status=400)
+            return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
         except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({'error': f'Erro ao gravar resultados: {str(e)}'}, status=500)
+
+    # Método não permitido
+    return JsonResponse({'error': 'Método não permitido.'}, status=405)
     
-    return JsonResponse({"error": "Método não permitido."}, status=405)
-
-
-
+        
 
 
 def prepare_training_environment(save_directory):

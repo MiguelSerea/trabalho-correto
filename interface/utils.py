@@ -1,6 +1,8 @@
 from itertools import product
+import json
 import logging
 import os
+import queue
 import shutil
 
 from interface.cnn import CNN, define_transforms, read_images
@@ -17,6 +19,9 @@ def clean_models_directory(directory_path):
         logging.info(f"Conteúdo da pasta {directory_path} foi apagado com sucesso.")
     except Exception as e:
         logging.error(f"Erro ao tentar limpar a pasta {directory_path}: {e}")
+        
+        
+
 
 
 

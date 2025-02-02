@@ -1,2 +1,110 @@
 
 
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        10,
+        0.001,
+        0
+    ],
+    "acc_media": 0.91,
+    "rep_max": 0,
+    "duration": 303.7449381351471
+}
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        10,
+        0.001,
+        0.0001
+    ],
+    "acc_media": 0.93,
+    "rep_max": 0,
+    "duration": 319.22944736480713
+}
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        10,
+        0.0001,
+        0
+    ],
+    "acc_media": 0.91,
+    "rep_max": 0,
+    "duration": 333.15507650375366
+}
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        10,
+        0.0001,
+        0.0001
+    ],
+    "acc_media": 0.89,
+    "rep_max": 0,
+    "duration": 344.1786115169525
+}
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        10,
+        1e-05,
+        0
+    ],
+    "acc_media": 0.81,
+    "rep_max": 0,
+    "duration": 339.038325548172
+}
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        10,
+        1e-05,
+        0.0001
+    ],
+    "acc_media": 0.75,
+    "rep_max": 0,
+    "duration": 316.7901928424835
+}
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        20,
+        0.001,
+        0
+    ],
+    "acc_media": 0.93,
+    "rep_max": 0,
+    "duration": 357.0423905849457
+}
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        10,
+        0.001,
+        0
+    ],
+    "acc_media": 0.92,
+    "rep_max": 0,
+    "duration": 273.0005934238434
+}
+{
+    "status": "FINISHED",
+    "combination": [
+        "alexnet",
+        10,
+        0.001,
+        0.0001
+    ],
+    "acc_media": 0.94,
+    "rep_max": 0,
+    "duration": 312.24035692214966
+}
