@@ -272,54 +272,53 @@ def decentralized_multiprocess_view(request):
         
 def processRequest():
     """Processa uma requisição de worker (descentralizada)."""
+    timeout = time.time() + 60  # Timeout de 60 segundos
     
-    while True:  # Mantém o loop rodando para processar tarefas enquanto houver itens na fila.
-        with queue_lock:  # Usa um bloqueio para assegurar que o acesso à fila seja thread-safe.
-            if task_queue.empty():
-                break  # Se a fila estiver vazia, sai do loop e para o processamento.
+    while True:
+        if time.time() > timeout:
+            logging.warning("Timeout reached in processRequest")
+            break
 
-            # Recupera a próxima tupla de tarefa da fila.
+        with queue_lock:
+            if task_queue.empty():
+                break
+
             received_tuple = task_queue.get()
 
-        # Define as chaves que serão usadas para transformar a tupla em um dicionário.
-        keys = ['machine_id', 'ip_address', 'status', 'num_cores']
-
-        # Converte a tupla em um dicionário para fácil acesso.
+        keys = ['machine_id', 'ip_address', 'status']
         receivedJson = dict(zip(keys, received_tuple))
-
-        # Obtém o status do trabalhador da tarefa atual.
         status = receivedJson.get('status')
 
-        if status == 'ONLINE':  # Se o status do trabalhador é 'ONLINE':
-            # Obtém o número de núcleos disponíveis para processamento.
-            num_cores = receivedJson.get('num_cores', 0)
-            combinations = []  # Inicializa uma lista para armazenar combinações que serão processadas.
+        if status == 'ONLINE':
+            # Calcula o número de combinações por worker
+            total_combinations = queue.qsize()  # Número total de combinações na fila
+            num_workers = len(registered_workers)  # Número de workers registrados
+            combinations_per_worker = total_combinations // num_workers  # Divisão igualitária
 
-            with queue_lock:  # Novamente, usa um bloqueio para acesso seguro à fila global de combinações.
-                # Itera até o número de combinações disponíveis ou num_cores, o que for menor.
-                for _ in range(num_cores):
+            combinations = []
+            with queue_lock:
+                for _ in range(combinations_per_worker):
                     if not queue.empty():
-                        combinations.append(queue.get())  # Adiciona a combinação à lista se a fila não estiver vazia.
+                        combinations.append(queue.get())  # Adiciona a combinação à lista
                     else:
-                        break  # Encerra o loop se a fila ficar vazia.
+                        break
 
-            # Prepara o JSON a ser enviado contendo todas as combinações selecionadas.
+            # Prepara o JSON a ser enviado
             json_to_send = {"data": combinations}
 
-            # Envia o JSON para a URL de endpoint do trabalhador concatenando com ip_address.
-            send_json(json_to_send, receivedJson.get('ip_address') + 'receive_task/')
+            # Envia o JSON para o worker
+            try:
+                send_json(json_to_send, receivedJson.get('ip_address') + 'receive_task/')
+                logging.info(f"Sent {len(combinations)} combinations to {receivedJson.get('ip_address')}")
+            except Exception as e:
+                logging.error(f"Failed to send JSON to {receivedJson.get('ip_address')}: {e}")
 
-        elif status == 'FINISHED':  # Se o status resolve para 'FINISHED':
-            # Checa se há dados associados ao término da tarefa.
+        elif status == 'FINISHED':
             data = receivedJson.get('data')
-
-            if data:
-                # Salva os resultados em um arquivo de texto local.
+            if data and isinstance(data, (list, dict)):
                 with open("results.txt", "a") as file:
-                    file.write(json.dumps(data) + "\n")  # Grava os dados finalizados no arquivo.
-                
-            # Loga uma mensagem indicando o sucesso na gravação dos dados.
-            logging.info("Data saved successfully")
+                    file.write(json.dumps(data) + "\n")
+                logging.info("Data saved successfully")
             
             
 
