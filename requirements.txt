@@ -5,3 +5,4 @@ psycopg2-binary==2.9.7
 django-heroku==0.3.1
 joblib==1.2.0
 requests==2.28.2
+torch==1.13.0
