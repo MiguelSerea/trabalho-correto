@@ -4,6 +4,7 @@ import logging
 from itertools import product
 import shutil
 
+import socket
 import threading
 import time
 from django.http import JsonResponse
@@ -246,7 +247,7 @@ def decentralized_multiprocess_view(request):
     """Inicia o treinamento descentralizado via multiprocessamento."""
     
     if request.method == 'POST':
-        clean_models_directory('models')
+        threading.Thread(target=start_socket_server).start()
 
         # Manejamento de threads com base no número de workers
         threads = []
@@ -388,3 +389,47 @@ def prepare_training_environment(save_directory):
         (model_name, epoch, learning_rate, weight_decay, replications, cnn)
         for model_name, epoch, learning_rate, weight_decay in combinations
     ], os.path.join(save_directory, "results.txt")
+    
+    
+# Configurações do socket do servidor
+SERVER_HOST = '0.0.0.0'  # Escuta em todas as interfaces
+SERVER_PORT = 5000       # Porta para conexão dos workers
+BUFFER_SIZE = 4096       # Tamanho do buffer para receber dados
+
+def start_socket_server():
+    """Inicia o servidor socket para comunicação com os workers."""
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((SERVER_HOST, SERVER_PORT))
+    server_socket.listen(5)  # Aceita até 5 conexões simultâneas
+    logging.info(f"Socket server listening on {SERVER_HOST}:{SERVER_PORT}")
+
+    while True:
+        client_socket, client_address = server_socket.accept()
+        logging.info(f"New connection from {client_address}")
+        threading.Thread(target=handle_worker, args=(client_socket,)).start()
+
+def handle_worker(client_socket):
+    """Lida com a comunicação com um worker conectado."""
+    try:
+        while True:
+            # Envia uma tarefa para o worker
+            if not task_queue.empty():
+                task = task_queue.get()
+                client_socket.send(json.dumps(task).encode('utf-8'))
+                logging.info(f"Sent task to worker: {task}")
+
+            # Recebe o resultado do worker
+            result = client_socket.recv(BUFFER_SIZE).decode('utf-8')
+            if result:
+                logging.info(f"Received result from worker: {result}")
+                with open("results.txt", "a") as file:
+                    file.write(result + "\n")
+            else:
+                break
+    except Exception as e:
+        logging.error(f"Error handling worker: {e}")
+    finally:
+        client_socket.close()
+        logging.info("Worker disconnected")
+
+# Inicia o servidor socket em uma thread separada

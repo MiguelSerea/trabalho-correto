@@ -1,17 +1,4 @@
-boto3==1.35.43
-cryptography==44.0.0
 Django==5.1.5
 django-heroku==0.3.1
-djangorestframework==3.15.2
 gunicorn==23.0.0
-ipykernel==6.29.5
-joblib==1.4.2
-networkx==3.4.2
-pip-chill==1.0.3
-scikit-fuzzy==0.5.0
-scikit-learn==1.5.1
-spicy==0.16.0
-torch==2.5.1
-torchvision==0.20.1
-urllib3==2.2.2
-pywin32; sys_platform == 'win32'
+psycopg2==2.9.6
