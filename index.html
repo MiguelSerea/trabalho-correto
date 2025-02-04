@@ -1,0 +1,71 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload e Processamento de Imagem</title>
+  <link rel="stylesheet" href="{% static 'admin/css/styles.css' %}">
+</head>
+
+<body>
+  <div class="container">
+    <div class="upload-area" id="dropZone">
+      <input type="file" id="fileInput" accept="image/*" hidden>
+      <svg class="upload-icon" viewBox="0 0 24 24" width="64" height="64">
+        <path
+          d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04C2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
+      </svg>
+      <p>Arraste uma imagem ou clique para selecionar</p>
+      <img id="previewImage" style="display: none; max-width: 100%; max-height: 300px;">
+    </div>
+
+    <div class="buttons">
+      <button id="centralizedUni" class="processing-btn">Centralizado Uniprocesso</button>
+      <button id="centralizedMulti" class="processing-btn">Centralizado Multiprocesso</button>
+      <button id="descentralizedMulti" class="processing-btn">Descentralizado Multiprocesso</button>
+      <button id="combine" class="processing-btn">Combine</button>
+      <button id="verify" class="processing-btn">Verificar</button>
+
+    </div>
+  </div>
+
+  <!-- Biblioteca JavaScript incluída -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script>
+    function sendRequest(endpoint) {
+      fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({})
+      })
+        .then(response => response.json())
+        .then(data => alert(data.message || data.error))
+        .catch(error => console.error('Erro:', error));
+    }
+
+    document.getElementById('centralizedUni').addEventListener('click', function () {
+      sendRequest('/start-training/');
+    });
+
+    document.getElementById('centralizedMulti').addEventListener('click', function () {
+      sendRequest('/centralized-multiprocess/');
+    });
+
+    document.getElementById('descentralizedMulti').addEventListener('click', function () {
+      sendRequest('/decentralized_multiprocess/');
+    });
+
+    document.getElementById('combine').addEventListener('click', function () {
+      sendRequest('/combine/');
+    });
+
+
+  </script>
+</body>
+
+</html>
