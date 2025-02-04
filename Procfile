@@ -1,1 +1,2 @@
-web: gunicorn front.wsgi
+web: gunicorn front.wsgi:application
+
